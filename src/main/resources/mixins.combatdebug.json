@@ -1,0 +1,10 @@
+{  
+  "required": true,  
+  "minVersion": "0.8",  
+  "package": "deliciousbread481.combatdebug.mixin",  
+  "compatibilityLevel": "JAVA_8",  
+  "refmap": "mixins.combatdebug.refmap.json",  
+  "mixins": [
+    "MixinEvent"
+  ]  
+}

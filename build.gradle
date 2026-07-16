@@ -1,0 +1,56 @@
+buildscript {
+    repositories {
+        maven { url = 'https://maven.minecraftforge.net/' }
+        maven { url = 'https://repo.spongepowered.org/repository/maven-public/' }
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT'
+    }
+}
+
+apply plugin: 'net.minecraftforge.gradle.forge'
+
+group = project.mod_group
+archivesBaseName = project.mod_name
+version = project.mod_version
+
+sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8'
+
+minecraft {
+    version = "${project.minecraft_version}-${project.forge_version}"
+    runDir = 'run'
+    mappings = "${project.mappings_channel}_${project.mappings_version}"
+}
+
+repositories {
+    maven { url = 'https://repo.spongepowered.org/repository/maven-public/' }
+}
+
+dependencies {
+    compileOnly 'org.spongepowered:mixin:0.8.5'
+}
+
+processResources {
+    inputs.property 'version', project.version
+    inputs.property 'mcversion', project.minecraft_version
+
+    from(sourceSets.main.resources.srcDirs) {
+        include 'mcmod.info'
+        expand 'version': project.version, 'mcversion': project.minecraft_version
+    }
+    from(sourceSets.main.resources.srcDirs) {
+        exclude 'mcmod.info'
+    }
+}
+
+jar {
+    manifest {
+        attributes(
+            'FMLCorePlugin'               : 'deliciousbread481.combatdebug.core.CombatDebugCore',
+            'FMLCorePluginContainsFMLMod' : 'true',
+            'MixinConfigs'                : 'mixins.combatdebug.json',
+            'ForceLoadAsMod'              : 'true'
+        )
+    }
+}

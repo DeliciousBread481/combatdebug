@@ -1,0 +1,10 @@
+[
+  {
+    "modid": "combatdebug",
+    "name": "CombatDebug",
+    "description": "Diagnostic mod: logs attack/damage event chain and player count.",
+    "version": "${version}",
+    "mcversion": "${mcversion}",
+    "authorList": ["deliciousbread481"]
+  }
+]
