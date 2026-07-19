@@ -1,10 +1,8 @@
 package deliciousbread481.combatdebug;
 
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.entity.living.LivingAttackEvent;
-import net.minecraftforge.event.entity.living.LivingDamageEvent;
-import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.event.entity.player.AttackEntityEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.ModContainer;
@@ -34,75 +32,53 @@ public class CombatEventHandler {
         return Thread.currentThread().getName();
     }
 
+    private static String side(Entity e) {
+        if (e == null || e.world == null) {
+            return "?";
+        }
+        return e.world.isRemote ? "CLIENT" : "SERVER";
+    }
+
     @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = true)
     public static void onAttackEntity(AttackEntityEvent event) {
-        Entity attacker = event.getEntityPlayer();
+        EntityPlayer player = event.getEntityPlayer();
         Entity target = event.getTarget();
-        CombatDebug.logger.warn("[AttackEntityEvent] attacker={} attackerDim={} target={} targetDim={} thread={} canceled={}",
-                attacker, dim(attacker), target, dim(target), thread(), event.isCanceled());
+        CombatDebug.logger.warn(
+                "[AttackEntityEvent] side={} attacker={} attackerDim={} target={} targetDim={} thread={} canceled={}",
+                side(player), player, dim(player), target, dim(target), thread(), event.isCanceled());
         if (event.isCanceled()) {
-            reportCancellers(event, "AttackEntityEvent");
+            reportCancellers(event);
         }
     }
 
-    @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = true)
-    public static void onLivingAttack(LivingAttackEvent event) {
-        Entity victim = event.getEntityLiving();
-        CombatDebug.logger.warn("[LivingAttackEvent] victim={} victimDim={} source={} amount={} thread={} canceled={}",
-                victim, dim(victim), event.getSource().getDamageType(), event.getAmount(), thread(), event.isCanceled());
-        if (event.isCanceled()) {
-            reportCancellers(event, "LivingAttackEvent");
-        }
-    }
-
-    @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = true)
-    public static void onLivingHurt(LivingHurtEvent event) {
-        Entity victim = event.getEntityLiving();
-        CombatDebug.logger.warn("[LivingHurtEvent] victim={} victimDim={} source={} amount={} thread={} canceled={}",
-                victim, dim(victim), event.getSource().getDamageType(), event.getAmount(), thread(), event.isCanceled());
-        if (event.isCanceled()) {
-            reportCancellers(event, "LivingHurtEvent");
-        }
-    }
-
-    @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = true)
-    public static void onLivingDamage(LivingDamageEvent event) {
-        Entity victim = event.getEntityLiving();
-        CombatDebug.logger.warn("[LivingDamageEvent] victim={} victimDim={} source={} amount={} thread={} canceled={}",
-                victim, dim(victim), event.getSource().getDamageType(), event.getAmount(), thread(), event.isCanceled());
-        if (event.isCanceled()) {
-            reportCancellers(event, "LivingDamageEvent");
-        }
-    }
-
-    private static void reportCancellers(Event event, String eventName) {
+    private static void reportCancellers(Event event) {
         try {
-            int busID = resolveForgeBusID();
+            int busID = getForgeBusID();
             if (busID < 0) {
-                CombatDebug.logger.warn("[{}] 无法解析 Forge EVENT_BUS 的 busID，跳过取消者点名。", eventName);
                 return;
             }
             IEventListener[] listeners = event.getListenerList().getListeners(busID);
-            CombatDebug.logger.warn("[{}] 事件被取消，候选取消者监听器列表（按优先级顺序）：", eventName);
-            EventPriority phase = null;
+            CombatDebug.logger.warn("[AttackEntityEvent] 事件被取消，候选取消者监听器：");
+            EventPriority current = null;
             for (IEventListener listener : listeners) {
                 if (listener instanceof EventPriority) {
-                    phase = (EventPriority) listener;
+                    current = (EventPriority) listener;
+                    continue;
+                }
+                if (current == EventPriority.NORMAL) {
                     continue;
                 }
                 if (listener instanceof ASMEventHandler) {
                     String readable = listener.toString();
-                    if (readable != null && readable.contains("deliciousbread481")) {
+                    if (readable.contains("deliciousbread481")) {
                         continue;
                     }
-                    String modName = ownerOf((ASMEventHandler) listener);
-                    CombatDebug.logger.warn("    priority={} listener={} mod={}", phase, readable, modName);
-                } else {
-                    CombatDebug.logger.warn("    priority={} listener={} (非 ASMEventHandler)", phase, listener);
+                    CombatDebug.logger.warn("    priority={} listener={} mod={}",
+                            current, readable, ownerOf((ASMEventHandler) listener));
                 }
             }
         } catch (Throwable t) {
-            CombatDebug.logger.warn("[{}] 点名取消者时出错：{}", eventName, t.toString());
+            CombatDebug.logger.warn("reportCancellers 失败：{}", t.toString());
         }
     }
 
@@ -115,13 +91,12 @@ public class CombatEventHandler {
                 ModContainer mc = (ModContainer) owner;
                 return mc.getName() + " (" + mc.getModId() + ")";
             }
-            return String.valueOf(owner);
-        } catch (Throwable t) {
-            return "<owner 读取失败: " + t + ">";
+        } catch (Throwable ignored) {
         }
+        return "?";
     }
 
-    private static int resolveForgeBusID() {
+    private static int getForgeBusID() {
         if (busIDResolved) {
             return forgeBusID;
         }

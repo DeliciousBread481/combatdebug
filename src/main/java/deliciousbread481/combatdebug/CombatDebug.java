@@ -8,49 +8,63 @@ import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.LoggerContext;
-import org.apache.logging.log4j.core.appender.FileAppender;
+import org.apache.logging.log4j.core.appender.RollingFileAppender;
+import org.apache.logging.log4j.core.appender.rolling.DefaultRolloverStrategy;
+import org.apache.logging.log4j.core.appender.rolling.SizeBasedTriggeringPolicy;
 import org.apache.logging.log4j.core.config.AppenderRef;
 import org.apache.logging.log4j.core.config.Configuration;
 import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.apache.logging.log4j.core.layout.PatternLayout;
 
-@Mod(modid = CombatDebug.MODID, name = CombatDebug.NAME, version = CombatDebug.VERSION, acceptableRemoteVersions = "*")
+@Mod(modid = "combatdebug", name = "CombatDebug", version = "1.2.0", acceptableRemoteVersions = "*")
 public class CombatDebug {
-
-    public static final String MODID   = "combatdebug";
-    public static final String NAME    = "CombatDebug";
-    public static final String VERSION = "1.1.0";
 
     public static Logger logger;
 
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
         logger = setupFileLogger();
-        logger.info("[CombatDebug] loaded. Logging to logs/combatdebug.log");
+        logger.warn("CombatDebug 启动，日志写入 logs/combatdebug-1.log（单文件 50MB，超出后新建 combatdebug-X.log）");
+    }
+
+    @Mod.EventHandler
+    public void serverStarting(FMLServerStartingEvent event) {
+        event.registerServerCommand(new PipelineDumpCommand());
     }
 
     private static Logger setupFileLogger() {
-        final LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
-        final Configuration config = ctx.getConfiguration();
+        LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
+        Configuration config = ctx.getConfiguration();
 
         PatternLayout layout = PatternLayout.newBuilder()
-                .withConfiguration(config)
                 .withPattern("[%d{HH:mm:ss}] [%t/%level]: %msg%n")
+                .withConfiguration(config)
                 .build();
 
-        FileAppender appender = FileAppender.newBuilder()
+        SizeBasedTriggeringPolicy policy = SizeBasedTriggeringPolicy.createPolicy("50 MB");
+        DefaultRolloverStrategy strategy = DefaultRolloverStrategy.createStrategy(
+                "2147483647",
+                "2",
+                "nomax",
+                null,
+                null,
+                false,
+                config);
+
+        RollingFileAppender appender = RollingFileAppender.newBuilder()
                 .withName("CombatDebugFile")
-                .withFileName("logs/combatdebug.log")
-                .withAppend(false)
+                .withFileName("logs/combatdebug-1.log")
+                .withFilePattern("logs/combatdebug-%i.log")
+                .withPolicy(policy)
+                .withStrategy(strategy)
                 .withLayout(layout)
-                .setConfiguration(config)
+                .withConfiguration(config)
                 .build();
         appender.start();
         config.addAppender(appender);
 
         AppenderRef ref = AppenderRef.createAppenderRef("CombatDebugFile", null, null);
-        AppenderRef[] refs = new AppenderRef[] { ref };
-
+        AppenderRef[] refs = new AppenderRef[]{ref};
         LoggerConfig loggerConfig = LoggerConfig.createLogger(
                 false, Level.ALL, "combatdebug", "true", refs, null, config, null);
         loggerConfig.addAppender(appender, null, null);
@@ -58,11 +72,5 @@ public class CombatDebug {
 
         ctx.updateLoggers();
         return LogManager.getLogger("combatdebug");
-    }
-
-    @Mod.EventHandler
-    public void serverStarting(FMLServerStartingEvent event) {
-        event.registerServerCommand(new PipelineDumpCommand());
-        logger.info("[CombatDebug] registered command: /combatdebug pipeline");
     }
 }
