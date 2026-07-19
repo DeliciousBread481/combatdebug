@@ -50,7 +50,7 @@ public class CombatEventHandler {
                 ctx(event.getEntity()), event.getEntity().getName(),
                 event.getSource().getDamageType(), event.getAmount(), event.isCanceled());
     }
-    
+
     @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = true)
     public static void onLivingDamage(LivingDamageEvent event) {
         CombatDebug.logger.info("{} LivingDamageEvent: victim={} source={} amount={} canceled={}",

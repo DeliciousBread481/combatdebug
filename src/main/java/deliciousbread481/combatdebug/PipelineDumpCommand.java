@@ -37,7 +37,7 @@ public class PipelineDumpCommand extends CommandBase {
         if (args.length < 1 || !"pipeline".equalsIgnoreCase(args[0])) {
             throw new CommandException("用法: /combatdebug pipeline");
         }
-        
+
         EntityPlayerMP player = getCommandSenderAsPlayer(sender);
 
         try {

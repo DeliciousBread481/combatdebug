@@ -24,11 +24,13 @@ minecraft {
 }
 
 repositories {
+    maven { url = 'https://maven.cleanroommc.com' }
     maven { url = 'https://repo.spongepowered.org/repository/maven-public/' }
 }
 
 dependencies {
     compileOnly 'org.spongepowered:mixin:0.8.5'
+    compileOnly 'zone.rong:mixinbooter:8.9'
 }
 
 processResources {
@@ -49,7 +51,6 @@ jar {
         attributes(
             'FMLCorePlugin'               : 'deliciousbread481.combatdebug.core.CombatDebugCore',
             'FMLCorePluginContainsFMLMod' : 'true',
-            'MixinConfigs'                : 'mixins.combatdebug.json',
             'ForceLoadAsMod'              : 'true'
         )
     }
