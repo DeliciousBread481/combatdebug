@@ -16,7 +16,7 @@ import org.apache.logging.log4j.core.config.Configuration;
 import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.apache.logging.log4j.core.layout.PatternLayout;
 
-@Mod(modid = "combatdebug", name = "CombatDebug", version = "1.2.0", acceptableRemoteVersions = "*")
+@Mod(modid = "combatdebug", name = "CombatDebug", version = "1.2.1", acceptableRemoteVersions = "*")
 public class CombatDebug {
 
     public static Logger logger;

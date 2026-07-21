@@ -5,30 +5,26 @@ import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.player.AttackEntityEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.ModContainer;
+import net.minecraftforge.fml.common.eventhandler.ASMEventHandler;
 import net.minecraftforge.fml.common.eventhandler.Event;
 import net.minecraftforge.fml.common.eventhandler.EventPriority;
 import net.minecraftforge.fml.common.eventhandler.IEventListener;
 import net.minecraftforge.fml.common.eventhandler.ListenerList;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
-import java.lang.reflect.Array;
 import java.lang.reflect.Field;
-import java.util.Collections;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.lang.reflect.Method;
 
 @Mod.EventBusSubscriber(modid = "combatdebug")
 public class CombatPriorityProbe {
 
-    private static final Set<Class<?>> WRAPPED =
-            Collections.newSetFromMap(new ConcurrentHashMap<Class<?>, Boolean>());
-
-
     private static int busID = -1;
-    private static Field listsField;
-    private static Field instListenersField;
-    private static Field instRebuildField;
-    private static Field asmOwnerField;
+    private static boolean installed = false;
+
+    private static Field LISTS_FIELD;
+    private static Method GET_LISTENERS_METHOD;
+    private static Field LISTENERS_FIELD;
+    private static Field REBUILD_FIELD;
 
     @SubscribeEvent(priority = EventPriority.HIGHEST, receiveCanceled = true)
     public static void onAttackEntity(AttackEntityEvent event) {
@@ -37,87 +33,77 @@ public class CombatPriorityProbe {
 
     @SubscribeEvent(priority = EventPriority.HIGHEST, receiveCanceled = true)
     public static void onLivingAttack(LivingAttackEvent event) {
-        if (event.getSource() != null && "player".equals(event.getSource().getDamageType())) {
-            ensureWrapped(event);
-        }
+        ensureWrapped(event);
     }
 
     private static void ensureWrapped(Event event) {
         try {
-            initReflection();
+            if (busID < 0) {
+                Field f = MinecraftForge.EVENT_BUS.getClass().getDeclaredField("busID");
+                f.setAccessible(true);
+                busID = f.getInt(MinecraftForge.EVENT_BUS);
+            }
+            ListenerList list = event.getListenerList();
 
-            ListenerList ll = event.getListenerList();
+            if (LISTS_FIELD == null) {
+                LISTS_FIELD = ListenerList.class.getDeclaredField("lists");
+                LISTS_FIELD.setAccessible(true);
+            }
+            Object[] insts = (Object[]) LISTS_FIELD.get(list);
+            Object inst = insts[busID];
 
-            Object[] lists = (Object[]) listsField.get(ll);
-            Object inst = lists[busID];
+            if (GET_LISTENERS_METHOD == null) {
+                GET_LISTENERS_METHOD = inst.getClass().getDeclaredMethod("getListeners");
+                GET_LISTENERS_METHOD.setAccessible(true);
+            }
+            GET_LISTENERS_METHOD.invoke(inst);
 
-            inst.getClass().getMethod("getListeners").invoke(inst);
-
-            IEventListener[] arr = (IEventListener[]) instListenersField.get(inst);
-            if (arr == null) {
-                return;
+            if (LISTENERS_FIELD == null) {
+                LISTENERS_FIELD = inst.getClass().getDeclaredField("listeners");
+                LISTENERS_FIELD.setAccessible(true);
+            }
+            if (REBUILD_FIELD == null) {
+                REBUILD_FIELD = inst.getClass().getDeclaredField("rebuild");
+                REBUILD_FIELD.setAccessible(true);
             }
 
+            IEventListener[] arr = (IEventListener[]) LISTENERS_FIELD.get(inst);
             for (IEventListener l : arr) {
-                if (l instanceof ProbeListener) {
+                if (l instanceof Wrapper) {
                     return;
                 }
             }
 
-            IEventListener[] wrapped =
-                    (IEventListener[]) Array.newInstance(IEventListener.class, arr.length);
-            EventPriority currentBand = null;
+            EventPriority phase = null;
+            IEventListener[] wrapped = new IEventListener[arr.length];
             for (int i = 0; i < arr.length; i++) {
                 IEventListener l = arr[i];
                 if (l instanceof EventPriority) {
-                    currentBand = (EventPriority) l;
+                    phase = (EventPriority) l;
                     wrapped[i] = l;
                 } else {
-                    wrapped[i] = new ProbeListener(l, currentBand);
+                    wrapped[i] = new Wrapper(l, phase);
                 }
             }
+            LISTENERS_FIELD.set(inst, wrapped);
+            REBUILD_FIELD.setBoolean(inst, false);
 
-            instListenersField.set(inst, wrapped);
-            instRebuildField.setBoolean(inst, false);
-
-            if (WRAPPED.add(event.getClass())) {
-                CombatDebug.logger.warn("[Probe] 已为事件 {} 安装逐 listener 探针（共 {} 个真实监听器）",
-                        event.getClass().getSimpleName(), arr.length);
+            if (!installed) {
+                installed = true;
+                CombatDebug.logger.warn("[Probe] 已为 {} 安装逐优先级探针", event.getClass().getSimpleName());
             }
         } catch (Throwable t) {
-            CombatDebug.logger.warn("[Probe] 安装探针失败: {}", t.toString());
+            CombatDebug.logger.warn("[Probe] 安装探针失败: " + t);
         }
     }
 
-    private static void initReflection() throws Exception {
-        if (busID != -1) {
-            return;
-        }
-
-        Field busIdF = MinecraftForge.EVENT_BUS.getClass().getDeclaredField("busID");
-        busIdF.setAccessible(true);
-        int id = busIdF.getInt(MinecraftForge.EVENT_BUS);
-
-        listsField = ListenerList.class.getDeclaredField("lists");
-        listsField.setAccessible(true);
-
-        Class<?> instClass = Class.forName(
-                "net.minecraftforge.fml.common.eventhandler.ListenerList$ListenerListInst");
-        instListenersField = instClass.getDeclaredField("listeners");
-        instListenersField.setAccessible(true);
-        instRebuildField = instClass.getDeclaredField("rebuild");
-        instRebuildField.setAccessible(true);
-
-        busID = id;
-    }
-
-    private static class ProbeListener implements IEventListener {
+    private static class Wrapper implements IEventListener {
         private final IEventListener delegate;
-        private final EventPriority band;
+        private final EventPriority phase;
 
-        ProbeListener(IEventListener delegate, EventPriority band) {
+        Wrapper(IEventListener delegate, EventPriority phase) {
             this.delegate = delegate;
-            this.band = band;
+            this.phase = phase;
         }
 
         @Override
@@ -125,28 +111,23 @@ public class CombatPriorityProbe {
             boolean before = event.isCancelable() && event.isCanceled();
             delegate.invoke(event);
             boolean after = event.isCancelable() && event.isCanceled();
-
             if (!before && after) {
-                CombatDebug.logger.warn(
-                        "[Probe] >>> 取消者锁定: event={} priority={} listener={} mod={}",
-                        event.getClass().getSimpleName(),
-                        band, delegate, ownerOf(delegate));
+                CombatDebug.logger.warn(">>> 取消者锁定: priority={} listener={} mod={}",
+                        phase, delegate, ownerOf(delegate));
             }
         }
     }
 
     private static String ownerOf(IEventListener listener) {
         try {
-            if (asmOwnerField == null) {
-                Class<?> asm = Class.forName(
-                        "net.minecraftforge.fml.common.eventhandler.ASMEventHandler");
-                asmOwnerField = asm.getDeclaredField("owner");
-                asmOwnerField.setAccessible(true);
-            }
-            Object owner = asmOwnerField.get(listener);
-            if (owner instanceof ModContainer) {
-                ModContainer mc = (ModContainer) owner;
-                return mc.getName() + " (" + mc.getModId() + ")";
+            if (listener instanceof ASMEventHandler) {
+                Field ownerField = ASMEventHandler.class.getDeclaredField("owner");
+                ownerField.setAccessible(true);
+                Object owner = ownerField.get(listener);
+                if (owner instanceof ModContainer) {
+                    ModContainer mc = (ModContainer) owner;
+                    return mc.getName() + " (" + mc.getModId() + ")";
+                }
             }
         } catch (Throwable ignored) {
         }
